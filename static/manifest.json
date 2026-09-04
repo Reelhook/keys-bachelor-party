@@ -1,0 +1,21 @@
+{
+  "name": "Jake's Keys Bachelor Party 2026",
+  "short_name": "Keys Party",
+  "description": "Companion app for the Florida Keys bachelor party itinerary, interactive map, budget, and provisioning.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a1622",
+  "theme_color": "#0a1622",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

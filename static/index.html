@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Jake's Keys Bachelor Party 🌴</title>
+  <meta name="description" content="Florida Keys Bachelor Party Companion App — Schedule, Interactive Map, Budget, and Provisioning">
+  <meta name="theme-color" content="#0a1622">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Keys Party">
+  <link rel="manifest" href="/manifest.json">
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  
+  <!-- App Styles -->
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <!-- App Shell -->
+  <div id="app" class="app-container">
+    
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="header-content">
+        <div class="header-titles">
+          <div class="brand-row">
+            <span class="trip-tag">🌴 FLORIDA KEYS 2026</span>
+            <span id="sync-badge" class="sync-badge" title="Live sync with Excel">
+              <span class="sync-dot"></span> Live Excel
+            </span>
+          </div>
+          <h1 class="trip-name">Jake's Bachelor Party</h1>
+          <p class="trip-meta">
+            <i class="fa-regular fa-calendar"></i> Sep 10–14, 2026 &nbsp;•&nbsp; 
+            <i class="fa-solid fa-location-dot"></i> Marathon &amp; Key West
+          </p>
+        </div>
+        
+        <div class="header-actions">
+          <button id="btn-qr-modal" class="icon-btn" aria-label="Share QR Code for Phones" title="Connect Phone">
+            <i class="fa-solid fa-qrcode"></i>
+          </button>
+          <button id="btn-refresh" class="icon-btn" aria-label="Refresh from Spreadsheet" title="Sync from Excel">
+            <i class="fa-solid fa-arrows-rotate"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Countdown Banner -->
+      <div class="countdown-strip">
+        <div class="countdown-inner">
+          <span class="countdown-label">⏳ T-MINUS</span>
+          <span id="countdown-val" class="countdown-digits">Calculating...</span>
+          <span class="countdown-loc">📍 Coral Lagoon Resort (MM 53.5)</span>
+        </div>
+      </div>
+
+      <!-- Sticky Day Selector Filter -->
+      <nav class="day-filter-bar" aria-label="Day Filter">
+        <div class="day-pills-scroll" id="day-pills-container">
+          <button class="day-pill active" data-day="all">All Days</button>
+          <button class="day-pill" data-day="thu">Thu 9/10</button>
+          <button class="day-pill" data-day="fri">Fri 9/11</button>
+          <button class="day-pill" data-day="sat">Sat 9/12</button>
+          <button class="day-pill" data-day="sun">Sun 9/13</button>
+          <button class="day-pill" data-day="mon">Mon 9/14</button>
+        </div>
+      </nav>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      
+      <!-- 1. SCHEDULE / TIMELINE VIEW -->
+      <section id="view-schedule" class="view-panel active">
+        <div class="section-title-row">
+          <div>
+            <h2>Daily Schedule</h2>
+            <p class="section-subtitle">Timeline, reservation status, and crew tips</p>
+          </div>
+          <span id="schedule-counter" class="badge-count">21 Events</span>
+        </div>
+
+        <div id="schedule-container" class="timeline-container">
+          <div class="loading-state">
+            <i class="fa-solid fa-spinner fa-spin"></i> Loading schedule from spreadsheet...
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. MAP VIEW -->
+      <section id="view-map" class="view-panel">
+        <div class="map-controls-bar">
+          <div class="map-filter-scroll">
+            <button class="map-filter-btn active" data-map-filter="all">All Pins</button>
+            <button class="map-filter-btn" data-map-filter="lodging"><i class="fa-solid fa-house"></i> Villa</button>
+            <button class="map-filter-btn" data-map-filter="boating"><i class="fa-solid fa-ship"></i> Boat &amp; Reef</button>
+            <button class="map-filter-btn" data-map-filter="food_drink"><i class="fa-solid fa-utensils"></i> Food &amp; Drinks</button>
+            <button class="map-filter-btn" data-map-filter="nightlife"><i class="fa-solid fa-martini-glass"></i> Nightlife</button>
+          </div>
+          <button id="btn-recenter-map" class="map-recenter-btn" title="Fit All Locations">
+            <i class="fa-solid fa-expand"></i> Keys
+          </button>
+        </div>
+
+        <!-- Leaflet Map Container -->
+        <div id="keys-map" class="keys-map-canvas"></div>
+
+        <!-- Bottom Sheet Preview for Tapped Marker -->
+        <div id="map-venue-sheet" class="map-venue-sheet hidden">
+          <button id="btn-close-sheet" class="sheet-close-btn">&times;</button>
+          <div class="sheet-content">
+            <div class="sheet-header">
+              <span id="sheet-category" class="sheet-category-badge">Category</span>
+              <h3 id="sheet-title">Venue Title</h3>
+            </div>
+            <p id="sheet-address" class="sheet-address"><i class="fa-solid fa-location-dot"></i> <span></span></p>
+            <p id="sheet-time" class="sheet-time"><i class="fa-regular fa-clock"></i> <span></span></p>
+            <p id="sheet-notes" class="sheet-notes"></p>
+            <div class="sheet-actions">
+              <a id="sheet-btn-nav" href="#" target="_blank" class="sheet-btn primary">
+                <i class="fa-solid fa-diamond-turn-right"></i> Open Navigation
+              </a>
+              <a id="sheet-btn-call" href="#" class="sheet-btn secondary hidden">
+                <i class="fa-solid fa-phone"></i> Call
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. VENUES & ACTIVITIES DIRECTORY -->
+      <section id="view-venues" class="view-panel">
+        <div class="section-title-row">
+          <div>
+            <h2>Venues &amp; Guide</h2>
+            <p class="section-subtitle">Contacts, happy hours, and insider crew tips</p>
+          </div>
+          <span id="venues-count" class="badge-count">19 Venues</span>
+        </div>
+
+        <div class="search-box-row">
+          <div class="search-input-wrap">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="venue-search-input" placeholder="Search bars, dining, reefs..." autocomplete="off">
+          </div>
+        </div>
+
+        <div id="venues-container" class="venues-grid">
+          <div class="loading-state">
+            <i class="fa-solid fa-spinner fa-spin"></i> Loading venues...
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. BUDGET BREAKDOWN VIEW -->
+      <section id="view-budget" class="view-panel">
+        <div class="section-title-row">
+          <div>
+            <h2>Budget &amp; Cost Split</h2>
+            <p class="section-subtitle">Synced directly from Budget Tracker tab</p>
+          </div>
+        </div>
+
+        <!-- Budget Metric Cards -->
+        <div class="budget-kpis-grid">
+          <div class="kpi-card total">
+            <span class="kpi-label">Total Trip Cost</span>
+            <span id="kpi-total-cost" class="kpi-val">$0</span>
+            <span class="kpi-sub">Lodging, charters, fuel &amp; food</span>
+          </div>
+          <div class="kpi-card share">
+            <span class="kpi-label">Per Guy (5 Crew)</span>
+            <span id="kpi-per-person" class="kpi-val">$0</span>
+            <span class="kpi-sub">Equal 5-way split</span>
+          </div>
+          <div class="kpi-card paid">
+            <span class="kpi-label">Already Paid</span>
+            <span id="kpi-paid" class="kpi-val">$0</span>
+            <span class="kpi-sub">Steven deposits</span>
+          </div>
+          <div class="kpi-card due">
+            <span class="kpi-label">Due at Dock / Trip</span>
+            <span id="kpi-due" class="kpi-val">$0</span>
+            <span class="kpi-sub">Remaining balance</span>
+          </div>
+        </div>
+
+        <!-- Category Cost Breakdown -->
+        <div class="card-box">
+          <h3 class="card-box-title"><i class="fa-solid fa-chart-pie"></i> Cost by Category</h3>
+          <div id="budget-category-list" class="category-bars-list"></div>
+        </div>
+
+        <!-- Detailed Ledger -->
+        <div class="card-box">
+          <h3 class="card-box-title"><i class="fa-solid fa-receipt"></i> Budget Line Items</h3>
+          <div id="budget-items-table" class="budget-table-wrap"></div>
+        </div>
+      </section>
+
+      <!-- 5. PROVISIONING CHECKLIST VIEW -->
+      <section id="view-provisioning" class="view-panel">
+        <div class="section-title-row">
+          <div>
+            <h2>Publix &amp; Boat Supplies</h2>
+            <p class="section-subtitle">Check items off as you shop in Marathon</p>
+          </div>
+          <span id="provisioning-counter" class="badge-count">0 / 0 Packed</span>
+        </div>
+
+        <!-- Category Filter Chips -->
+        <div class="prov-filter-chips" id="prov-filter-chips">
+          <button class="prov-chip active" data-prov-cat="all">All Supplies</button>
+        </div>
+
+        <div id="provisioning-container" class="prov-list-container">
+          <div class="loading-state">
+            <i class="fa-solid fa-spinner fa-spin"></i> Loading provisioning list...
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. CREW & CONTACTS VIEW -->
+      <section id="view-crew" class="view-panel">
+        <div class="section-title-row">
+          <div>
+            <h2>Crew &amp; Key Contacts</h2>
+            <p class="section-subtitle">Villa details, emergency and service numbers</p>
+          </div>
+        </div>
+
+        <!-- Villa Quick Info Card -->
+        <div class="villa-card">
+          <div class="villa-badge">🏠 HOME BASE</div>
+          <h3>Coral Lagoon Resort &amp; Marina</h3>
+          <p class="villa-address"><i class="fa-solid fa-location-dot"></i> 12399 Overseas Hwy, Marathon, FL 33050 (MM 53.5)</p>
+          <div class="villa-features">
+            <span><i class="fa-solid fa-ship"></i> Private Boat Slip</span>
+            <span><i class="fa-solid fa-car"></i> Parking for 2 Cars</span>
+            <span><i class="fa-solid fa-wifi"></i> Resort Wi-Fi</span>
+          </div>
+          <div class="villa-actions">
+            <a href="https://maps.google.com/?q=12399+Overseas+Hwy+Marathon+FL+33050" target="_blank" class="villa-btn">
+              <i class="fa-solid fa-diamond-turn-right"></i> Navigate to Villa
+            </a>
+            <a href="tel:3052890121" class="villa-btn secondary">
+              <i class="fa-solid fa-phone"></i> Call Resort
+            </a>
+          </div>
+        </div>
+
+        <!-- Crew Roster Cards -->
+        <div class="card-box">
+          <h3 class="card-box-title"><i class="fa-solid fa-users"></i> The Crew (5 Guys)</h3>
+          <div id="crew-roster-list" class="crew-list"></div>
+        </div>
+
+        <!-- Important Contacts List -->
+        <div class="card-box">
+          <h3 class="card-box-title"><i class="fa-solid fa-phone-volume"></i> Emergency &amp; Service Contacts</h3>
+          <div id="contacts-list" class="contacts-grid"></div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar -->
+    <nav class="bottom-nav-bar" aria-label="Main Navigation">
+      <button class="nav-item active" data-target="view-schedule">
+        <i class="fa-regular fa-calendar-days"></i>
+        <span>Schedule</span>
+      </button>
+      <button class="nav-item" data-target="view-map">
+        <i class="fa-solid fa-map-location-dot"></i>
+        <span>Map</span>
+      </button>
+      <button class="nav-item" data-target="view-venues">
+        <i class="fa-solid fa-champagne-glasses"></i>
+        <span>Venues</span>
+      </button>
+      <button class="nav-item" data-target="view-budget">
+        <i class="fa-solid fa-wallet"></i>
+        <span>Budget</span>
+      </button>
+      <button class="nav-item" data-target="view-provisioning">
+        <i class="fa-solid fa-cart-shopping"></i>
+        <span>Supplies</span>
+      </button>
+      <button class="nav-item" data-target="view-crew">
+        <i class="fa-solid fa-user-group"></i>
+        <span>Crew</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- QR Code / Mobile Connect Modal -->
+  <div id="qr-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <button id="btn-close-qr-modal" class="modal-close">&times;</button>
+      <div class="modal-icon"><i class="fa-solid fa-mobile-screen-button"></i></div>
+      <h3>Open on Your Cell Phone</h3>
+      <p class="modal-desc">Connect your phone to the same Wi-Fi network and scan below with your camera:</p>
+      
+      <div id="qrcode-box" class="qr-canvas-wrap"></div>
+      
+      <div class="modal-url-box">
+        <span id="qr-url-text">http://...</span>
+        <button id="btn-copy-url" class="copy-btn" title="Copy URL">
+          <i class="fa-regular fa-copy"></i>
+        </button>
+      </div>
+
+      <div class="pwa-tip">
+        <i class="fa-brands fa-apple"></i> / <i class="fa-brands fa-android"></i>
+        <strong>Tip:</strong> Tap "Share" &rarr; "Add to Home Screen" to use this like a native app during the trip!
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast-notification hidden">
+    <i class="fa-solid fa-circle-check"></i>
+    <span id="toast-text">Spreadsheet synchronized!</span>
+  </div>
+
+  <!-- External Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
