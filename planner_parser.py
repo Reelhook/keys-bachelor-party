@@ -18,27 +18,50 @@ GDRIVE_LOCAL_XLSX = "/home/reelsurface/.mnt/gdrive/OldPhoneStuff/Key_West_Bachel
 
 DEFAULT_SPREADSHEET_PATH = os.environ.get("SPREADSHEET_PATH") or (GDRIVE_LOCAL_XLSX if os.path.exists(GDRIVE_LOCAL_XLSX) else BUNDLED_XLSX)
 
+def extract_google_id(raw_val):
+    if not raw_val:
+        return ""
+    val = raw_val.strip()
+    # Check for /d/<ID> in URLs
+    m = re.search(r'/d/([a-zA-Z0-9_-]+)', val)
+    if m:
+        return m.group(1)
+    # Check for id=<ID> in URLs
+    m = re.search(r'[?&]id=([a-zA-Z0-9_-]+)', val)
+    if m:
+        return m.group(1)
+    return val
+
 def resolve_spreadsheet_path():
     """Returns the best available spreadsheet path or downloads from remote URL if configured."""
-    remote_url = os.environ.get("SPREADSHEET_URL")
-    sheet_id = os.environ.get("GOOGLE_SHEET_ID")
-    drive_id = os.environ.get("GOOGLE_DRIVE_FILE_ID")
+    raw_url = os.environ.get("SPREADSHEET_URL") or os.environ.get("GOOGLE_DRIVE_FILE_ID") or os.environ.get("GOOGLE_SHEET_ID")
+    
+    if raw_url:
+        g_id = extract_google_id(raw_url)
+        # Try Google Sheets export first, then Google Drive direct download
+        candidate_urls = []
+        if "docs.google.com/spreadsheets" in raw_url or os.environ.get("GOOGLE_SHEET_ID"):
+            candidate_urls.append(f"https://docs.google.com/spreadsheets/d/{g_id}/export?format=xlsx")
+            candidate_urls.append(f"https://drive.google.com/uc?export=download&id={g_id}")
+        else:
+            candidate_urls.append(f"https://drive.google.com/uc?export=download&id={g_id}")
+            candidate_urls.append(f"https://docs.google.com/spreadsheets/d/{g_id}/export?format=xlsx")
 
-    if not remote_url and sheet_id:
-        remote_url = f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx"
-    elif not remote_url and drive_id:
-        remote_url = f"https://drive.google.com/uc?export=download&id={drive_id}"
-
-    if remote_url:
-        try:
-            target_tmp = "/tmp/cloud_planner.xlsx"
-            req = urllib.request.Request(remote_url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as response, open(target_tmp, "wb") as out_file:
-                out_file.write(response.read())
-            if os.path.exists(target_tmp) and os.path.getsize(target_tmp) > 1000:
-                return target_tmp
-        except Exception as e:
-            print(f"[Warning] Failed to fetch remote spreadsheet: {e}. Using local fallback.")
+        target_tmp = "/tmp/cloud_planner.xlsx"
+        for candidate_url in candidate_urls:
+            try:
+                req = urllib.request.Request(candidate_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    content = response.read()
+                    # Verify it looks like a valid ZIP/XLSX (starts with PK\x03\x04)
+                    if content and content.startswith(b"PK"):
+                        with open(target_tmp, "wb") as out_file:
+                            out_file.write(content)
+                        if os.path.exists(target_tmp) and os.path.getsize(target_tmp) > 1000:
+                            return target_tmp
+            except Exception as e:
+                pass
+        print("[Warning] Could not fetch remote file via URL/ID. Falling back to local copy.")
 
     if os.path.exists(GDRIVE_LOCAL_XLSX):
         return GDRIVE_LOCAL_XLSX
