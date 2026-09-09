@@ -11,6 +11,27 @@
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Constants
+  const LOCATIONS = {
+    marathon: { name: 'Marathon (Villa & Reef)', lat: 24.7136, lng: -81.0903 },
+    keywest: { name: 'Key West (Duval & Harbor)', lat: 24.5551, lng: -81.7800 },
+  };
+
+  const WMO_CODES = {
+    0: 'Clear Sky ☀️',
+    1: 'Mainly Clear 🌤️',
+    2: 'Partly Cloudy ⛅',
+    3: 'Overcast ☁️',
+    45: 'Foggy 🌫️',
+    51: 'Light Drizzle 🌦️',
+    61: 'Slight Rain 🌧️',
+    63: 'Moderate Rain 🌧️',
+    65: 'Heavy Rain 🌧️',
+    80: 'Rain Showers 🌦️',
+    81: 'Showers 🌧️',
+    95: 'Thunderstorm ⛈️',
+  };
+
   // App State
   const state = {
     data: null,
@@ -751,7 +772,27 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderSettleUp() {
     if (!els.settleUpBalances || !els.settleExpensesList) return;
 
-    const crew = ['Jake', 'Steven', 'Zach', 'Christian', 'Tyler'];
+    const crew = (state.data && state.data.dashboard && state.data.dashboard.crew_roster && state.data.dashboard.crew_roster.length)
+      ? state.data.dashboard.crew_roster.map((m) => m.name)
+      : ['Jake', 'Steven', 'Brandon', 'Coker', 'Cameron'];
+
+    // Sync modal select options and checkboxes if crew roster loaded
+    const payerSelect = document.getElementById('exp-payer');
+    const splitBox = document.getElementById('split-checkboxes');
+    if (payerSelect && splitBox && payerSelect.dataset.synced !== crew.join(',')) {
+      let selHtml = '';
+      let cbHtml = '';
+      crew.forEach((name) => {
+        const roleTag = name === 'Jake' ? ' (Bachelor)' : name === 'Steven' ? ' (Best Man)' : '';
+        const isSelected = name === 'Steven' ? 'selected' : '';
+        selHtml += `<option value="${escapeHtml(name)}" ${isSelected}>${escapeHtml(name)}${roleTag}</option>`;
+        cbHtml += `<label class="split-check-label"><input type="checkbox" name="split-guy" value="${escapeHtml(name)}" checked> ${escapeHtml(name)}</label>`;
+      });
+      payerSelect.innerHTML = selHtml;
+      splitBox.innerHTML = cbHtml;
+      payerSelect.dataset.synced = crew.join(',');
+    }
+
     const balances = {};
     crew.forEach((name) => (balances[name] = 0));
 
@@ -932,26 +973,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 13. Live Keys Marine & Weather Widget (Open-Meteo)
-  const LOCATIONS = {
-    marathon: { name: 'Marathon (Villa & Reef)', lat: 24.7136, lng: -81.0903 },
-    keywest: { name: 'Key West (Duval & Harbor)', lat: 24.5551, lng: -81.7800 },
-  };
-
-  const WMO_CODES = {
-    0: 'Clear Sky ☀️',
-    1: 'Mainly Clear 🌤️',
-    2: 'Partly Cloudy ⛅',
-    3: 'Overcast ☁️',
-    45: 'Foggy 🌫️',
-    51: 'Light Drizzle 🌦️',
-    61: 'Slight Rain 🌧️',
-    63: 'Moderate Rain 🌧️',
-    65: 'Heavy Rain 🌧️',
-    80: 'Rain Showers 🌦️',
-    81: 'Showers 🌧️',
-    95: 'Thunderstorm ⛈️',
-  };
-
   function setupWeather() {
     if (!els.weatherMarineCard) return;
 

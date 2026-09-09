@@ -184,7 +184,7 @@ class PlannerParser:
             if "CREW ROSTER" in str_a:
                 section = "crew"
                 continue
-            elif "BUDGET SUMMARY" in str_a:
+            elif "BUDGET" in str_a:
                 section = "budget"
                 continue
             elif "PENDING ACTION ITEMS" in str_a:
