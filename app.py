@@ -42,6 +42,13 @@ def add_header(response):
 def serve_index():
     return send_from_directory(app.static_folder, "index.html")
 
+@app.route("/sw.js")
+def serve_sw():
+    response = send_from_directory(app.static_folder, "sw.js")
+    response.headers["Service-Worker-Allowed"] = "/"
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    return response
+
 @app.route("/api/data", methods=["GET"])
 def get_trip_data():
     try:

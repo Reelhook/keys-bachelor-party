@@ -1475,3 +1475,496 @@ body {
   margin-bottom: 8px;
   display: block;
 }
+
+/* ==========================================================================
+   ENHANCEMENTS: Offline Banner, Marine Weather, Settle Up, Boat Protocols
+   ========================================================================== */
+
+/* Offline Banner */
+.offline-banner {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+  color: #071018;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+  padding: 6px 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  animation: slideDownBanner 0.3s ease;
+}
+
+.offline-banner.hidden {
+  display: none;
+}
+
+@keyframes slideDownBanner {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
+}
+
+/* Schedule Header Share Button */
+.section-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-share-plan {
+  background: rgba(0, 229, 212, 0.12);
+  border: 1px solid rgba(0, 229, 212, 0.3);
+  color: var(--accent-cyan);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-share-plan:hover, .btn-share-plan:active {
+  background: var(--accent-cyan);
+  color: #071018;
+}
+
+/* Live Marine & Weather Widget */
+.weather-marine-card {
+  background: linear-gradient(135deg, rgba(14, 30, 48, 0.95), rgba(7, 20, 32, 0.95));
+  border: 1px solid rgba(0, 229, 212, 0.25);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.weather-marine-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(0, 229, 212, 0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.weather-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.weather-loc-toggle {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--surface-border);
+}
+
+.weather-loc-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.weather-loc-btn.active {
+  background: var(--accent-cyan);
+  color: #071018;
+  box-shadow: 0 2px 8px var(--accent-cyan-glow);
+}
+
+.weather-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent-sky);
+  background: rgba(56, 189, 248, 0.12);
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.weather-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .weather-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 8px;
+  }
+}
+
+.weather-metric {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.wm-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+
+.wm-val {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.wm-sub {
+  font-size: 0.68rem;
+  color: var(--accent-cyan);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Map Action Buttons */
+.map-action-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.map-action-btn {
+  background: rgba(10, 22, 34, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--surface-border);
+  color: var(--accent-cyan);
+  padding: 6px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.map-action-btn:hover, .map-action-btn:active {
+  background: var(--accent-cyan);
+  color: #071018;
+}
+
+/* GPS User Marker on Map */
+.gps-user-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #38bdf8;
+  border: 3px solid #fff;
+  box-shadow: 0 0 12px #38bdf8;
+  animation: pulse-gps 2s infinite ease-in-out;
+}
+
+@keyframes pulse-gps {
+  0% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7); }
+  70% { box-shadow: 0 0 0 16px rgba(56, 189, 248, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(56, 189, 248, 0); }
+}
+
+/* On-The-Fly Tab & Settle Up */
+.settle-up-box {
+  margin-top: 20px;
+}
+
+.card-box-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 8px;
+}
+
+.card-box-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.btn-primary-compact {
+  background: var(--accent-cyan);
+  color: #071018;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px var(--accent-cyan-glow);
+  transition: all 0.2s ease;
+}
+
+.btn-primary-compact:hover {
+  transform: translateY(-1px);
+}
+
+.settle-balances-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.settle-empty {
+  text-align: center;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.settle-balance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+}
+
+.settle-payer, .settle-payee {
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.settle-arrow {
+  color: var(--accent-cyan);
+  font-size: 0.8rem;
+  margin: 0 8px;
+}
+
+.settle-amt {
+  font-family: var(--font-heading);
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--accent-emerald);
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+}
+
+.settle-actions-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.btn-outline-compact {
+  background: transparent;
+  border: 1px solid var(--surface-border);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-outline-compact:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.btn-link-danger {
+  background: transparent;
+  border: none;
+  color: #f87171;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px;
+}
+
+.settle-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.settle-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+}
+
+.settle-item-title {
+  font-weight: 600;
+  color: #fff;
+}
+
+.settle-item-sub {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.settle-item-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settle-item-amt {
+  font-weight: 700;
+  color: var(--accent-amber);
+}
+
+.settle-item-del {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 4px;
+}
+
+.settle-item-del:hover {
+  color: #f87171;
+}
+
+/* Modal Form Styles */
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.form-group input, .form-group select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  color: #fff;
+  outline: none;
+  font-family: var(--font-body);
+}
+
+.form-group select {
+  cursor: pointer;
+  background: #0f2233;
+}
+
+.form-group input:focus, .form-group select:focus {
+  border-color: var(--accent-cyan);
+}
+
+.split-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--surface-border);
+}
+
+.split-check-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #fff;
+  cursor: pointer;
+}
+
+.split-check-label input {
+  accent-color: var(--accent-cyan);
+  width: 16px;
+  height: 16px;
+}
+
+.btn-modal-submit {
+  background: var(--accent-cyan);
+  color: #071018;
+  border: none;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+  box-shadow: 0 4px 16px var(--accent-cyan-glow);
+  transition: all 0.2s ease;
+}
+
+.btn-modal-submit:hover {
+  transform: translateY(-1px);
+}
+

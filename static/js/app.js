@@ -1,6 +1,13 @@
 /**
  * app.js
  * Florida Keys Bachelor Party Companion App Client Logic
+ * Enhanced with:
+ * - Live Keys Marine & Weather Conditions (Open-Meteo API)
+ * - Offshore Offline Support (Service Worker + Local Cache)
+ * - Group Tab & Settle Up Expense Splitter
+ * - One-Tap "Copy Day Plan" for iMessage / WhatsApp / GroupMe
+ * - GPS "Locate Me" on Interactive Map
+ * - Mobile Haptics & Visual Feedback
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,11 +20,17 @@ document.addEventListener('DOMContentLoaded', () => {
     map: null,
     markers: [],
     mapFilter: 'all',
+    userGpsMarker: null,
+    userGpsCircle: null,
     checkedItems: JSON.parse(localStorage.getItem('keys_prov_checked') || '{}'),
+    expenses: JSON.parse(localStorage.getItem('keys_bachelor_expenses') || '[]'),
+    weatherLoc: 'marathon',
+    weatherCache: {},
   };
 
   // DOM Elements
   const els = {
+    // Header & Global
     btnRefresh: document.getElementById('btn-refresh'),
     btnQrModal: document.getElementById('btn-qr-modal'),
     qrModal: document.getElementById('qr-modal'),
@@ -29,14 +42,32 @@ document.addEventListener('DOMContentLoaded', () => {
     dayPills: document.querySelectorAll('.day-pill'),
     navItems: document.querySelectorAll('.nav-item'),
     viewPanels: document.querySelectorAll('.view-panel'),
+    toast: document.getElementById('toast'),
+    toastText: document.getElementById('toast-text'),
+    offlineBanner: document.getElementById('offline-banner'),
+
+    // Schedule View
+    btnCopyDayPlan: document.getElementById('btn-copy-day-plan'),
     scheduleContainer: document.getElementById('schedule-container'),
     scheduleCounter: document.getElementById('schedule-counter'),
-    venuesContainer: document.getElementById('venues-container'),
-    venuesCount: document.getElementById('venues-count'),
-    venueSearchInput: document.getElementById('venue-search-input'),
+
+    // Weather Widget
+    weatherMarineCard: document.getElementById('weather-marine-card'),
+    weatherLocBtns: document.querySelectorAll('.weather-loc-btn'),
+    weatherTemp: document.getElementById('weather-temp'),
+    weatherDesc: document.getElementById('weather-desc'),
+    weatherWind: document.getElementById('weather-wind'),
+    weatherWindDir: document.getElementById('weather-wind-dir'),
+    weatherBoatStatus: document.getElementById('weather-boat-status'),
+    weatherBoatSub: document.getElementById('weather-boat-sub'),
+    weatherSunset: document.getElementById('weather-sunset'),
+    weatherUv: document.getElementById('weather-uv'),
+
+    // Map View
     mapVenueSheet: document.getElementById('map-venue-sheet'),
     btnCloseSheet: document.getElementById('btn-close-sheet'),
     btnRecenterMap: document.getElementById('btn-recenter-map'),
+    btnLocateMe: document.getElementById('btn-locate-me'),
     sheetTitle: document.getElementById('sheet-title'),
     sheetCategory: document.getElementById('sheet-category'),
     sheetAddress: document.getElementById('sheet-address'),
@@ -44,11 +75,24 @@ document.addEventListener('DOMContentLoaded', () => {
     sheetNotes: document.getElementById('sheet-notes'),
     sheetBtnNav: document.getElementById('sheet-btn-nav'),
     sheetBtnCall: document.getElementById('sheet-btn-call'),
-    toast: document.getElementById('toast'),
-    toastText: document.getElementById('toast-text'),
+
+    // Venues View
+    venuesContainer: document.getElementById('venues-container'),
+    venuesCount: document.getElementById('venues-count'),
+    venueSearchInput: document.getElementById('venue-search-input'),
+
+    // Budget & Settle Up
+    btnAddExpenseModal: document.getElementById('btn-add-expense-modal'),
+    expenseModal: document.getElementById('expense-modal'),
+    btnCloseExpenseModal: document.getElementById('btn-close-expense-modal'),
+    expenseForm: document.getElementById('expense-form'),
+    settleUpBalances: document.getElementById('settle-up-balances'),
+    settleExpensesList: document.getElementById('settle-expenses-list'),
+    btnCopySettle: document.getElementById('btn-copy-settle'),
+    btnClearSettle: document.getElementById('btn-clear-settle'),
   };
 
-  // 1. Initial Load & Event Listeners
+  // 1. Initial Load & Setup
   init();
 
   function init() {
@@ -56,24 +100,43 @@ document.addEventListener('DOMContentLoaded', () => {
     setupDayFilter();
     setupSearch();
     setupModals();
+    setupOffline();
+    setupWeather();
+    setupSharePlan();
+    setupMapLocate();
+    setupSettleUp();
     startCountdown();
     fetchData();
 
     // Auto-refresh every 60 seconds if tab is active
     setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
         fetchData(false, true);
       }
     }, 60000);
   }
 
-  // 2. Fetch Trip Data from Flask API
+  // Helper: Haptic Vibration for Touch Devices
+  function triggerHaptic(ms = 15) {
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(ms);
+      } catch (e) {}
+    }
+  }
+
+  // 2. Fetch Trip Data from Flask API with Offline Fallback
   async function fetchData(forceRefresh = false, silent = false) {
     if (!silent) {
       els.btnRefresh.classList.add('rotating');
+      triggerHaptic(15);
     }
 
     try {
+      if (!navigator.onLine && !forceRefresh) {
+        throw new Error('Offline');
+      }
+
       const endpoint = forceRefresh ? '/api/refresh' : '/api/data';
       const method = forceRefresh ? 'POST' : 'GET';
       const resp = await fetch(endpoint, { method });
@@ -82,6 +145,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (result.success && result.data) {
         state.data = result.data;
         state.lanUrl = result.lan_url || window.location.origin;
+
+        // Cache for offline reef browsing
+        try {
+          localStorage.setItem('keys_trip_data_cache', JSON.stringify(result.data));
+        } catch (e) {}
 
         renderAll();
 
@@ -92,8 +160,17 @@ document.addEventListener('DOMContentLoaded', () => {
         throw new Error(result.error || 'Failed to parse data');
       }
     } catch (err) {
-      console.error('Error fetching trip data:', err);
-      if (!silent) {
+      console.warn('Network fetch failed, attempting cached fallback:', err);
+      const cached = localStorage.getItem('keys_trip_data_cache');
+      if (cached) {
+        try {
+          state.data = JSON.parse(cached);
+          renderAll();
+          if (!silent) {
+            showToast('Loaded cached offline data');
+          }
+        } catch (e) {}
+      } else if (!silent) {
         showToast('Error syncing spreadsheet. Check connection.');
       }
     } finally {
@@ -101,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // 3. Render Views
+  // 3. Render All Views
   function renderAll() {
     renderSchedule();
     renderVenues();
@@ -109,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProvisioning();
     renderCrew();
     renderQR();
+    renderSettleUp();
     if (state.map) {
       updateMapMarkers();
     }
@@ -118,6 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupNavigation() {
     els.navItems.forEach((btn) => {
       btn.addEventListener('click', () => {
+        triggerHaptic(10);
         const targetViewId = btn.dataset.target;
         switchTab(targetViewId);
       });
@@ -157,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function setupDayFilter() {
     els.dayPills.forEach((pill) => {
       pill.addEventListener('click', () => {
+        triggerHaptic(12);
         els.dayPills.forEach((p) => p.classList.remove('active'));
         pill.classList.add('active');
         state.currentDay = pill.dataset.day;
@@ -199,7 +279,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       items.forEach((item) => {
         eventCount++;
-        const isTentative = item.status.includes('Tentative') || item.status.includes('Backup');
+        const isTentative = (item.status || '').includes('Tentative') || (item.status || '').includes('Backup');
         const cardClass = isTentative ? 'timeline-card tentative' : 'timeline-card';
         const statusClass = getStatusClass(item.status);
 
@@ -263,14 +343,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     L.control.zoom({ position: 'topright' }).addTo(state.map);
 
-    // Clean OpenStreetMap tiles (no API key required)
+    // Clean OpenStreetMap tiles
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(state.map);
 
     // Map recollapse/recenter
     els.btnRecenterMap.addEventListener('click', () => {
+      triggerHaptic(12);
       fitAllMarkers();
     });
 
@@ -281,6 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Map category filters
     document.querySelectorAll('.map-filter-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        triggerHaptic(10);
         document.querySelectorAll('.map-filter-btn').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
         state.mapFilter = btn.dataset.mapFilter;
@@ -371,6 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bounds.extend([geo.lat, geo.lng]);
 
     marker.on('click', () => {
+      triggerHaptic(15);
       openMapSheet(geo, title, time, notes, address, phone);
       state.map.panTo([geo.lat, geo.lng]);
     });
@@ -407,10 +490,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Global helper for Schedule -> Map linking
   window.focusVenueMap = function (venueTitle) {
+    triggerHaptic(12);
     switchTab('view-map');
     setTimeout(() => {
       if (!state.map) initMap();
-      const marker = state.markers.find((m) => m._venueTitle.toLowerCase().includes(venueTitle.toLowerCase()) || venueTitle.toLowerCase().includes(m._venueTitle.toLowerCase()));
+      const marker = state.markers.find(
+        (m) =>
+          m._venueTitle.toLowerCase().includes(venueTitle.toLowerCase()) ||
+          venueTitle.toLowerCase().includes(m._venueTitle.toLowerCase())
+      );
       if (marker) {
         state.map.flyTo(marker.getLatLng(), 14, { duration: 1 });
         marker.fire('click');
@@ -420,7 +508,60 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 200);
   };
 
-  // 8. Venues Directory View
+  // 8. GPS "Locate Me" on Map
+  function setupMapLocate() {
+    if (!els.btnLocateMe) return;
+
+    els.btnLocateMe.addEventListener('click', () => {
+      triggerHaptic(15);
+      if (!navigator.geolocation) {
+        showToast('Geolocation is not supported by your browser.');
+        return;
+      }
+
+      showToast('Finding your GPS location...');
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const accuracy = pos.coords.accuracy;
+
+          if (!state.map) initMap();
+
+          // Remove old GPS markers if existing
+          if (state.userGpsMarker) state.map.removeLayer(state.userGpsMarker);
+          if (state.userGpsCircle) state.map.removeLayer(state.userGpsCircle);
+
+          const gpsIcon = L.divIcon({
+            className: 'gps-div-icon',
+            html: '<div class="gps-user-marker"></div>',
+            iconSize: [18, 18],
+            iconAnchor: [9, 9],
+          });
+
+          state.userGpsMarker = L.marker([lat, lng], { icon: gpsIcon }).addTo(state.map);
+          state.userGpsCircle = L.circle([lat, lng], {
+            radius: Math.min(accuracy, 200),
+            color: '#38bdf8',
+            fillColor: '#38bdf8',
+            fillOpacity: 0.15,
+            weight: 1,
+          }).addTo(state.map);
+
+          state.map.flyTo([lat, lng], 13, { duration: 1.2 });
+          showToast('Located! Showing your position 📍');
+        },
+        (err) => {
+          console.warn('Geolocation error:', err);
+          showToast('Unable to retrieve your location. Enable GPS.');
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    });
+  }
+
+  // 9. Venues Directory View
   function renderVenues() {
     if (!state.data || !state.data.activities) return;
     const activities = state.data.activities;
@@ -481,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 9. Budget View Rendering
+  // 10. Budget View Rendering
   function renderBudget() {
     if (!state.data || !state.data.budget) return;
     const b = state.data.budget;
@@ -534,15 +675,404 @@ document.addEventListener('DOMContentLoaded', () => {
     tableWrap.innerHTML = tableHtml;
   }
 
-  // 10. Provisioning View Rendering
+  // 11. On-The-Fly Tab & Settle Up Tracker
+  function setupSettleUp() {
+    if (!els.btnAddExpenseModal) return;
+
+    els.btnAddExpenseModal.addEventListener('click', () => {
+      triggerHaptic(15);
+      els.expenseModal.classList.remove('hidden');
+    });
+
+    els.btnCloseExpenseModal.addEventListener('click', () => {
+      els.expenseModal.classList.add('hidden');
+    });
+
+    els.expenseModal.addEventListener('click', (e) => {
+      if (e.target === els.expenseModal) {
+        els.expenseModal.classList.add('hidden');
+      }
+    });
+
+    els.expenseForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      triggerHaptic(20);
+
+      const desc = document.getElementById('exp-desc').value.trim();
+      const amount = parseFloat(document.getElementById('exp-amount').value);
+      const payer = document.getElementById('exp-payer').value;
+      const checkedGuys = Array.from(document.querySelectorAll('input[name="split-guy"]:checked')).map((c) => c.value);
+
+      if (!desc || isNaN(amount) || amount <= 0 || checkedGuys.length === 0) {
+        showToast('Please fill in valid expense details.');
+        return;
+      }
+
+      const newExpense = {
+        id: 'exp_' + Date.now(),
+        desc,
+        amount,
+        payer,
+        splitWith: checkedGuys,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      state.expenses.unshift(newExpense);
+      localStorage.setItem('keys_bachelor_expenses', JSON.stringify(state.expenses));
+
+      els.expenseForm.reset();
+      // Keep all checkboxes checked
+      document.querySelectorAll('input[name="split-guy"]').forEach((c) => (c.checked = true));
+      els.expenseModal.classList.add('hidden');
+
+      renderSettleUp();
+      showToast(`Added "$${amount.toFixed(2)} for ${desc}"!`);
+    });
+
+    els.btnCopySettle.addEventListener('click', () => {
+      triggerHaptic(20);
+      copySettleUpSummary();
+    });
+
+    els.btnClearSettle.addEventListener('click', () => {
+      if (state.expenses.length === 0) return;
+      if (confirm('Clear all logged on-the-fly tabs?')) {
+        triggerHaptic(25);
+        state.expenses = [];
+        localStorage.removeItem('keys_bachelor_expenses');
+        renderSettleUp();
+        showToast('Tab tracker reset.');
+      }
+    });
+
+    renderSettleUp();
+  }
+
+  function renderSettleUp() {
+    if (!els.settleUpBalances || !els.settleExpensesList) return;
+
+    const crew = ['Jake', 'Steven', 'Zach', 'Christian', 'Tyler'];
+    const balances = {};
+    crew.forEach((name) => (balances[name] = 0));
+
+    // Calculate Net Balances
+    state.expenses.forEach((exp) => {
+      const share = exp.amount / exp.splitWith.length;
+      exp.splitWith.forEach((guy) => {
+        if (guy !== exp.payer) {
+          balances[guy] = (balances[guy] || 0) - share;
+        }
+      });
+      // Payer gets credited for others' shares
+      const otherShares = exp.splitWith.filter((g) => g !== exp.payer).length;
+      balances[exp.payer] = (balances[exp.payer] || 0) + share * otherShares;
+    });
+
+    // Simplify debts: Match debtors with creditors
+    const creditors = [];
+    const debtors = [];
+    for (const [guy, bal] of Object.entries(balances)) {
+      if (bal > 0.05) creditors.push({ name: guy, amt: bal });
+      else if (bal < -0.05) debtors.push({ name: guy, amt: -bal });
+    }
+
+    creditors.sort((a, b) => b.amt - a.amt);
+    debtors.sort((a, b) => b.amt - a.amt);
+
+    const settlements = [];
+    let i = 0,
+      j = 0;
+    while (i < debtors.length && j < creditors.length) {
+      const settleAmt = Math.min(debtors[i].amt, creditors[j].amt);
+      if (settleAmt > 0.05) {
+        settlements.push({
+          from: debtors[i].name,
+          to: creditors[j].name,
+          amount: settleAmt,
+        });
+      }
+      debtors[i].amt -= settleAmt;
+      creditors[j].amt -= settleAmt;
+
+      if (debtors[i].amt < 0.05) i++;
+      if (creditors[j].amt < 0.05) j++;
+    }
+
+    // Render Balances Summary
+    if (settlements.length === 0) {
+      els.settleUpBalances.innerHTML = `
+        <div class="settle-empty">
+          ${state.expenses.length === 0 ? 'No extra tabs logged yet. Tap <strong>+ Add Tab</strong> when picking up a round!' : '🎉 All settled up! No outstanding balances.'}
+        </div>
+      `;
+    } else {
+      let bHtml = '';
+      settlements.forEach((s) => {
+        bHtml += `
+          <div class="settle-balance-row">
+            <div>
+              <span class="settle-payer">${escapeHtml(s.from)}</span>
+              <span class="settle-arrow"><i class="fa-solid fa-arrow-right"></i> owes</span>
+              <span class="settle-payee">${escapeHtml(s.to)}</span>
+            </div>
+            <span class="settle-amt">$${s.amount.toFixed(2)}</span>
+          </div>
+        `;
+      });
+      els.settleUpBalances.innerHTML = bHtml;
+    }
+
+    // Render Expense Items History
+    let expHtml = '';
+    state.expenses.forEach((item) => {
+      expHtml += `
+        <div class="settle-item">
+          <div>
+            <div class="settle-item-title">${escapeHtml(item.desc)}</div>
+            <div class="settle-item-sub">Paid by ${escapeHtml(item.payer)} • Split ${item.splitWith.length} ways • ${escapeHtml(item.time || '')}</div>
+          </div>
+          <div class="settle-item-right">
+            <span class="settle-item-amt">$${item.amount.toFixed(2)}</span>
+            <button class="settle-item-del" onclick="window.deleteExpense('${item.id}')" title="Delete tab">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </div>
+        </div>
+      `;
+    });
+    els.settleExpensesList.innerHTML = expHtml;
+  }
+
+  window.deleteExpense = function (id) {
+    triggerHaptic(15);
+    state.expenses = state.expenses.filter((e) => e.id !== id);
+    localStorage.setItem('keys_bachelor_expenses', JSON.stringify(state.expenses));
+    renderSettleUp();
+    showToast('Expense removed.');
+  };
+
+  function copySettleUpSummary() {
+    if (state.expenses.length === 0) {
+      showToast('No expenses to copy yet!');
+      return;
+    }
+
+    let text = `🌴 JAKE'S KEYS BACHELOR PARTY — TAB SETTLE UP 💸\n`;
+    const balanceRows = document.querySelectorAll('.settle-balance-row');
+    if (balanceRows.length === 0) {
+      text += `All settled up! No outstanding balances.\n`;
+    } else {
+      balanceRows.forEach((row) => {
+        const payer = row.querySelector('.settle-payer').textContent;
+        const payee = row.querySelector('.settle-payee').textContent;
+        const amt = row.querySelector('.settle-amt').textContent;
+        text += `• ${payer} owes ${payee}: ${amt}\n`;
+      });
+    }
+
+    const total = state.expenses.reduce((sum, e) => sum + e.amount, 0);
+    text += `\nTotal Tabs: ${state.expenses.length} ($${total.toFixed(2)})\n`;
+    text += `📱 Check live: ${window.location.href}`;
+
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Settle-up balances copied to clipboard!');
+    });
+  }
+
+  // 12. "Copy Day Plan" for Group Chat
+  function setupSharePlan() {
+    if (!els.btnCopyDayPlan) return;
+
+    els.btnCopyDayPlan.addEventListener('click', () => {
+      triggerHaptic(20);
+      if (!state.data || !state.data.itinerary) return;
+
+      const days = state.data.itinerary.days || [];
+      let targetDayGroup = null;
+
+      if (state.currentDay === 'all') {
+        targetDayGroup = days;
+      } else {
+        targetDayGroup = days.filter((d) => {
+          const t = d.title.toUpperCase();
+          if (state.currentDay === 'thu') return t.includes('THURSDAY');
+          if (state.currentDay === 'fri') return t.includes('FRIDAY');
+          if (state.currentDay === 'sat') return t.includes('SATURDAY');
+          if (state.currentDay === 'sun') return t.includes('SUNDAY');
+          if (state.currentDay === 'mon') return t.includes('MONDAY');
+          return false;
+        });
+      }
+
+      if (!targetDayGroup || targetDayGroup.length === 0) {
+        showToast('No events found for this filter.');
+        return;
+      }
+
+      let text = `🌴 JAKE'S KEYS BACHELOR PARTY ITINERARY 🌴\n\n`;
+
+      targetDayGroup.forEach((group) => {
+        text += `📅 ${group.title.toUpperCase()}\n`;
+        text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+        (group.items || []).forEach((item) => {
+          text += `⏰ ${item.time || 'TBD'} — ${item.activity}\n`;
+          if (item.address) text += `   📍 ${item.address}\n`;
+          if (item.status) text += `   🏷️ ${item.status}\n`;
+          if (item.notes) text += `   💡 ${item.notes}\n`;
+          text += `\n`;
+        });
+      });
+
+      text += `📱 Open full companion app & map:\n${window.location.href}`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('Itinerary copied! Ready to paste in GroupMe / iMessage 🎉');
+      });
+    });
+  }
+
+  // 13. Live Keys Marine & Weather Widget (Open-Meteo)
+  const LOCATIONS = {
+    marathon: { name: 'Marathon (Villa & Reef)', lat: 24.7136, lng: -81.0903 },
+    keywest: { name: 'Key West (Duval & Harbor)', lat: 24.5551, lng: -81.7800 },
+  };
+
+  const WMO_CODES = {
+    0: 'Clear Sky ☀️',
+    1: 'Mainly Clear 🌤️',
+    2: 'Partly Cloudy ⛅',
+    3: 'Overcast ☁️',
+    45: 'Foggy 🌫️',
+    51: 'Light Drizzle 🌦️',
+    61: 'Slight Rain 🌧️',
+    63: 'Moderate Rain 🌧️',
+    65: 'Heavy Rain 🌧️',
+    80: 'Rain Showers 🌦️',
+    81: 'Showers 🌧️',
+    95: 'Thunderstorm ⛈️',
+  };
+
+  function setupWeather() {
+    if (!els.weatherMarineCard) return;
+
+    els.weatherLocBtns.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        triggerHaptic(10);
+        els.weatherLocBtns.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.weatherLoc = btn.dataset.loc;
+        fetchKeysWeather(state.weatherLoc);
+      });
+    });
+
+    fetchKeysWeather(state.weatherLoc);
+  }
+
+  async function fetchKeysWeather(locKey) {
+    const loc = LOCATIONS[locKey] || LOCATIONS.marathon;
+
+    // Check 20-min cache
+    const cacheKey = `weather_${locKey}`;
+    const cached = state.weatherCache[cacheKey];
+    if (cached && Date.now() - cached.time < 20 * 60 * 1000) {
+      applyWeatherUI(cached.data, loc.name);
+      return;
+    }
+
+    try {
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lng}&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m&daily=uv_index_max,sunset&temperature_unit=fahrenheit&wind_speed_unit=kn&timezone=America%2FNew_York`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+
+      if (data && data.current) {
+        state.weatherCache[cacheKey] = { data, time: Date.now() };
+        applyWeatherUI(data, loc.name);
+      }
+    } catch (e) {
+      console.warn('Weather fetch error:', e);
+      if (els.weatherDesc) els.weatherDesc.textContent = 'Sunny & Tropical 🌴';
+      if (els.weatherTemp) els.weatherTemp.textContent = '84°F';
+      if (els.weatherWind) els.weatherWind.textContent = '8 kt';
+      if (els.weatherBoatStatus) els.weatherBoatStatus.textContent = 'Calm 🚤';
+    }
+  }
+
+  function applyWeatherUI(data, locName) {
+    const current = data.current || {};
+    const daily = data.daily || {};
+
+    // Temperature & Description
+    const temp = Math.round(current.temperature_2m || 82);
+    const code = current.weather_code || 0;
+    const desc = WMO_CODES[code] || 'Tropical 🌴';
+
+    if (els.weatherTemp) els.weatherTemp.textContent = `${temp}°F`;
+    if (els.weatherDesc) els.weatherDesc.textContent = desc;
+
+    // Wind & Direction (in Knots for Boating)
+    const windKt = Math.round(current.wind_speed_10m || 8);
+    const windDirDeg = current.wind_direction_10m || 90;
+    const compassDirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+    const compass = compassDirs[Math.round(windDirDeg / 22.5) % 16] || 'E';
+
+    if (els.weatherWind) els.weatherWind.textContent = `${windKt} kt`;
+    if (els.weatherWindDir) els.weatherWindDir.textContent = `${compass} (${Math.round(windKt * 1.15)} mph)`;
+
+    // Boating / Reef Safety evaluation
+    let boatStatus = 'Calm 🚤';
+    let boatSub = 'Reef Safe';
+    if (windKt > 20) {
+      boatStatus = 'Rough 🛑';
+      boatSub = 'Stay Inshore';
+    } else if (windKt > 14) {
+      boatStatus = 'Breezy ⚠️';
+      boatSub = 'Caution on Reef';
+    } else if (windKt > 9) {
+      boatStatus = 'Moderate 🌊';
+      boatSub = 'Light Chop';
+    }
+
+    if (els.weatherBoatStatus) els.weatherBoatStatus.textContent = boatStatus;
+    if (els.weatherBoatSub) els.weatherBoatSub.textContent = boatSub;
+
+    // Sunset & UV Index
+    const uvMax = daily.uv_index_max ? Math.round(daily.uv_index_max[0]) : 8;
+    let sunsetStr = '7:35 PM';
+    if (daily.sunset && daily.sunset[0]) {
+      const sDate = new Date(daily.sunset[0]);
+      sunsetStr = sDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+
+    if (els.weatherSunset) els.weatherSunset.textContent = sunsetStr;
+    if (els.weatherUv) els.weatherUv.textContent = `UV ${uvMax} (${uvMax >= 8 ? 'Very High' : uvMax >= 6 ? 'High' : 'Moderate'})`;
+  }
+
+  // 14. Offshore Offline Support
+  function setupOffline() {
+    window.addEventListener('online', () => {
+      if (els.offlineBanner) els.offlineBanner.classList.add('hidden');
+      showToast('Back online! Syncing spreadsheet...');
+      fetchData(false, true);
+    });
+
+    window.addEventListener('offline', () => {
+      if (els.offlineBanner) els.offlineBanner.classList.remove('hidden');
+      showToast('Offline mode active &bull; Cached for offshore use');
+    });
+
+    if (!navigator.onLine && els.offlineBanner) {
+      els.offlineBanner.classList.remove('hidden');
+    }
+  }
+
+  // 15. Provisioning View Rendering
   function renderProvisioning() {
     if (!state.data || !state.data.provisioning) return;
     const prov = state.data.provisioning;
-    const container = document.getElementById('provisioning-container');
     const chipContainer = document.getElementById('prov-filter-chips');
 
     // Build filter chips once
-    if (chipContainer.children.length <= 1) {
+    if (chipContainer && chipContainer.children.length <= 1) {
       let chips = '<button class="prov-chip active" data-prov-cat="all">All Supplies</button>';
       (prov.categories || []).forEach((cat) => {
         chips += `<button class="prov-chip" data-prov-cat="${escapeHtml(cat.name)}">${escapeHtml(cat.name)}</button>`;
@@ -551,6 +1081,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       chipContainer.querySelectorAll('.prov-chip').forEach((chip) => {
         chip.addEventListener('click', () => {
+          triggerHaptic(10);
           chipContainer.querySelectorAll('.prov-chip').forEach((c) => c.classList.remove('active'));
           chip.classList.add('active');
           renderProvisioningItems(chip.dataset.provCat);
@@ -564,6 +1095,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function renderProvisioningItems(categoryFilter) {
     const prov = state.data.provisioning;
     const container = document.getElementById('provisioning-container');
+    if (!container) return;
+
     let html = '';
     let totalItems = 0;
     let checkedCount = 0;
@@ -598,10 +1131,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     container.innerHTML = html;
-    document.getElementById('provisioning-counter').textContent = `${checkedCount} / ${totalItems} Packed`;
+    const counter = document.getElementById('provisioning-counter');
+    if (counter) counter.textContent = `${checkedCount} / ${totalItems} Packed`;
   }
 
   window.toggleProvItem = function (itemId) {
+    triggerHaptic(15);
     if (state.checkedItems[itemId]) {
       delete state.checkedItems[itemId];
     } else {
@@ -613,69 +1148,80 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProvisioningItems(activeChip ? activeChip.dataset.provCat : 'all');
   };
 
-  // 11. Crew & Contacts Rendering
+  // 16. Crew & Contacts Rendering
   function renderCrew() {
     if (!state.data || !state.data.dashboard) return;
     const d = state.data.dashboard;
 
     // Roster
     const crewList = document.getElementById('crew-roster-list');
-    let crewHtml = '';
-    (d.crew_roster || []).forEach((member) => {
-      const initial = (member.name || 'C')[0].toUpperCase();
-      crewHtml += `
-        <div class="crew-item">
-          <div class="crew-avatar">${initial}</div>
-          <div class="crew-info">
-            <h4>${escapeHtml(member.name)}</h4>
-            <p>${escapeHtml(member.role || 'Crew Member')}</p>
+    if (crewList) {
+      let crewHtml = '';
+      (d.crew_roster || []).forEach((member) => {
+        const initial = (member.name || 'C')[0].toUpperCase();
+        crewHtml += `
+          <div class="crew-item">
+            <div class="crew-avatar">${initial}</div>
+            <div class="crew-info">
+              <h4>${escapeHtml(member.name)}</h4>
+              <p>${escapeHtml(member.role || 'Crew Member')}</p>
+            </div>
           </div>
-        </div>
-      `;
-    });
-    crewList.innerHTML = crewHtml;
+        `;
+      });
+      crewList.innerHTML = crewHtml;
+    }
 
     // Contacts
     const contactsList = document.getElementById('contacts-list');
-    let contactsHtml = '';
-    (d.contacts || []).forEach((c) => {
-      contactsHtml += `
-        <div class="contact-item">
-          <div>
-            <div class="contact-service">${escapeHtml(c.service)}</div>
-            <div class="contact-name">${escapeHtml(c.name)}</div>
+    if (contactsList) {
+      let contactsHtml = '';
+      (d.contacts || []).forEach((c) => {
+        contactsHtml += `
+          <div class="contact-item">
+            <div>
+              <div class="contact-service">${escapeHtml(c.service)}</div>
+              <div class="contact-name">${escapeHtml(c.name)}</div>
+            </div>
+            ${
+              c.dial_number
+                ? `
+              <a class="contact-call-btn" href="tel:${c.dial_number}">
+                <i class="fa-solid fa-phone"></i> Call
+              </a>
+            `
+                : `<span class="badge-count">${escapeHtml(c.phone)}</span>`
+            }
           </div>
-          ${c.dial_number ? `
-            <a class="contact-call-btn" href="tel:${c.dial_number}">
-              <i class="fa-solid fa-phone"></i> Call
-            </a>
-          ` : `<span class="badge-count">${escapeHtml(c.phone)}</span>`}
-        </div>
-      `;
-    });
-    contactsList.innerHTML = contactsHtml;
+        `;
+      });
+      contactsList.innerHTML = contactsHtml;
+    }
   }
 
-  // 12. QR Code Generator for Mobile Connect
+  // 17. QR Code Generator for Mobile Connect
   function renderQR() {
     const url = state.lanUrl || window.location.href;
-    els.qrUrlText.textContent = url;
+    if (els.qrUrlText) els.qrUrlText.textContent = url;
 
-    els.qrCodeBox.innerHTML = '';
-    if (window.QRCode) {
-      new QRCode(els.qrCodeBox, {
-        text: url,
-        width: 180,
-        height: 180,
-        colorDark: '#071018',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M,
-      });
+    if (els.qrCodeBox) {
+      els.qrCodeBox.innerHTML = '';
+      if (window.QRCode) {
+        new QRCode(els.qrCodeBox, {
+          text: url,
+          width: 180,
+          height: 180,
+          colorDark: '#071018',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M,
+        });
+      }
     }
   }
 
   function setupModals() {
     els.btnQrModal.addEventListener('click', () => {
+      triggerHaptic(15);
       renderQR();
       els.qrModal.classList.remove('hidden');
     });
@@ -691,6 +1237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     els.btnCopyUrl.addEventListener('click', () => {
+      triggerHaptic(15);
       const url = els.qrUrlText.textContent;
       navigator.clipboard.writeText(url).then(() => {
         showToast('Link copied to clipboard!');
@@ -698,7 +1245,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // 13. Countdown Timer
+  // 18. Countdown Timer
   function startCountdown() {
     const tripDate = new Date('2026-09-10T12:00:00');
 
@@ -722,7 +1269,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(update, 60000);
   }
 
-  // 14. Toast Notification
+  // 19. Toast Notification
   let toastTimer = null;
   function showToast(msg) {
     els.toastText.textContent = msg;
@@ -730,10 +1277,10 @@ document.addEventListener('DOMContentLoaded', () => {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => {
       els.toast.classList.add('hidden');
-    }, 3200);
+    }, 3400);
   }
 
-  // 15. Sanitization Helpers
+  // 20. Sanitization Helpers
   function escapeHtml(str) {
     if (!str) return '';
     return String(str)
